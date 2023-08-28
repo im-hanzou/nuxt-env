@@ -1,14 +1,14 @@
-const fs = require('fs')
-const { Cluster } = require('puppeteer-cluster')
-const vanillaPuppeteer = require('puppeteer')
-const { addExtra } = require('puppeteer-extra')
-const Stealth = require('puppeteer-extra-plugin-stealth')
+const fs = require('fs');
+const { Cluster } = require('puppeteer-cluster');
+const vanillaPuppeteer = require('puppeteer');
+const { addExtra } = require('puppeteer-extra');
+const Stealth = require('puppeteer-extra-plugin-stealth');
 
 async function main() {
   // Create a custom puppeteer-extra instance using `addExtra`,
   // so we could create additional ones with different plugin config.
-  const puppeteer = addExtra(vanillaPuppeteer)
-  puppeteer.use(Stealth())
+  const puppeteer = addExtra(vanillaPuppeteer);
+  puppeteer.use(Stealth());
 
   // Launch cluster with puppeteer-extra
   const cluster = await Cluster.launch({
@@ -17,17 +17,18 @@ async function main() {
     concurrency: Cluster.CONCURRENCY_PAGE,
     puppeteerOptions: {
       args: ['--no-sandbox'],
+      ignoreHTTPSErrors: true, // Disable SSL verification
     },
-  })
+  });
 
   // Define task handler
   await cluster.task(async ({ page, data: url }) => {
-    await page.goto(url)
+    await page.goto(url);
 
     const env = await page.evaluate(() =>
       window.$nuxt ? window.$nuxt.context.env : null
-    )
-    const host = new URL(url).host
+    );
+    const host = new URL(url).host;
 
     if (env) {
       fs.writeFileSync(
@@ -36,24 +37,30 @@ async function main() {
         {
           encoding: 'utf8',
         }
-      )
+      );
 
-      console.log(`${host} -> results/${host}_env.json`)
+      console.log(`${host} -> results/${host}_env.json`);
     } else {
-      console.log(`${host} not NUXT`)
+      console.log(`${host} not NUXT`);
     }
-  })
+  });
 
   const lists = fs
     .readFileSync('lists.txt', { encoding: 'utf8' })
     .split('\n')
-    .filter((v) => v != '')
+    .filter((v) => v !== '');
 
-  lists.forEach((v) => cluster.queue(v))
+  lists.forEach((v) => {
+    // Add "https://" if the URL doesn't have a protocol
+    if (!v.startsWith('http://') && !v.startsWith('https://')) {
+      v = 'https://' + v;
+    }
+    cluster.queue(v);
+  });
 
-  await cluster.idle()
-  await cluster.close()
+  await cluster.idle();
+  await cluster.close();
 }
 
 // Let's go
-main().catch(console.warn)
+main().catch(console.warn);
